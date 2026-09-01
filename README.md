@@ -10,7 +10,7 @@
                        [ Driver Spoken Voice ]
                                   │
                                   ▼
-             [ Online STT: Google SpeechRecognition ]
+                  [ Offline STT: Vosk (16kHz) ]
                                   │
                                   ▼
     ┌──────────────────────────────────────────────────────────────┐
@@ -22,8 +22,17 @@
                               ▼
     ┌──────────────────────────────────────────────────────────────┐
     │                  Command Dispatcher                          │
-    │       Routes intent → Simulated VehicleController            │
+    │       Routes intent → correct hardware controller            │
     └─────────────────────────┬────────────────────────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+    ┌────────────────┐ ┌─────────────┐ ┌─────────────┐
+    │ DoorController │ │  TempSensor │ │  ACController│  ...
+    │  (Simulated /  │ │ (Simulated /│ │ (Simulated / │
+    │   Raspberry Pi)│ │  Raspberry  │ │  Raspberry   │
+    └────────────────┘ │  Pi GPIO)   │ │  Pi GPIO)    │
+                       └─────────────┘ └─────────────┘
                               │
                               ▼
                [ Two-Way Audio: pyttsx3 TTS ]
@@ -52,7 +61,27 @@
 | `EXIT` | Complete shutdown | *"Exit"*, *"Goodbye"* |
 | `UNSUPPORTED` | Feature not implemented | *"Play music"*, *"Navigate to Chennai"* |
 
+---
 
+## 🔧 Hardware Abstraction Layer
+
+DriveSense uses a **configuration-driven hardware abstraction** so the same AI/voice code runs on both platforms:
+
+```python
+# In drivesense.py — change this one variable:
+HARDWARE_MODE = "simulation"     # Laptop development
+HARDWARE_MODE = "raspberry_pi"   # Raspberry Pi deployment
+```
+
+| Abstraction | Simulated (Laptop) | Raspberry Pi (GPIO) |
+| :--- | :--- | :--- |
+| `TemperatureSensor` | Random 24–30°C | DHT22 on GPIO 4 |
+| `DistanceSensor` | Random 15–80cm | HC-SR04 on GPIO 23/24 |
+| `IRSensor` | Based on distance threshold | IR sensor on GPIO 17 |
+| `DoorController` | Updates VehicleState dict | Servo/motor on GPIO 5,6,12,13,19,26 |
+| `ACController` | Updates VehicleState flag | Relay on GPIO 27 |
+
+---
 
 ## 🗂️ Project Structure
 
@@ -61,6 +90,7 @@ digital-voice-assistant-in-car/
 ├── drivesense.py               # Complete voice assistant application
 ├── api_key.txt                 # Local file for Google Gemini API key
 ├── requirements.txt            # Python dependencies
+├── vosk-model-en-us-0.22/      # Offline speech recognition model
 ├── .gitignore                  # Git ignore rules
 └── README.md                   # This file
 ```
@@ -109,7 +139,38 @@ python drivesense.py
 5. Say **"DriveSense"** again → resumes
 6. Say **"Exit"** → shuts down
 
+---
 
+## 🍓 Raspberry Pi Deployment
+
+### Hardware Connections
+
+| Sensor / Actuator | RPi Pin | GPIO |
+| :--- | :--- | :--- |
+| DHT22 Temperature | Pin 7 | GPIO 4 |
+| HC-SR04 Trigger | Pin 16 | GPIO 23 |
+| HC-SR04 Echo (via divider) | Pin 18 | GPIO 24 |
+| IR Obstacle Sensor | Pin 11 | GPIO 17 |
+| AC Relay | Pin 13 | GPIO 27 |
+| Door Servo LEFT | Pin 29 | GPIO 5 |
+| Door Servo RIGHT | Pin 31 | GPIO 6 |
+| Door Servo FRONT_LEFT | Pin 32 | GPIO 12 |
+| Door Servo FRONT_RIGHT | Pin 33 | GPIO 13 |
+| Door Servo REAR_LEFT | Pin 35 | GPIO 19 |
+| Door Servo REAR_RIGHT | Pin 37 | GPIO 26 |
+
+### Migration Steps
+
+1. Copy project to Raspberry Pi
+2. Install dependencies: `pip install -r requirements.txt`
+3. Install Pi-specific libraries: `pip install RPi.GPIO Adafruit_DHT`
+4. Change `HARDWARE_MODE = "raspberry_pi"` in `drivesense.py`
+5. Connect USB microphone and speaker
+6. Run: `python drivesense.py`
+
+The voice/AI/dispatcher code remains **identical** — only the hardware implementations change.
+
+---
 
 ## 📄 License
 MIT License
