@@ -69,7 +69,7 @@ class DriveSenseAI:
     ]
 
     TEMPERATURE_PATTERNS = [
-        r"\b(temp|temperature|how hot|how cold|how warm|cabin temp|cabin temperature|vehicle temp|weather inside)\b"
+        r"\b(temp|temps|temperature|temperatures|how hot|how cold|how warm|cabin temp|cabin temperature|cabin temperatures|vehicle temp|vehicle temperature|weather inside)\b"
     ]
 
     DISTANCE_PATTERNS = [
