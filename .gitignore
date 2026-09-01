@@ -15,3 +15,7 @@ __pycache__/
 # System / OS files
 .DS_Store
 Thumbs.db
+
+# Offline Models
+vosk-model-en-us-0.22/
+api_key.txt
