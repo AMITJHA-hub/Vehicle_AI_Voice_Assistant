@@ -15,7 +15,7 @@
                                   ▼
     ┌──────────────────────────────────────────────────────────────┐
     │            DriveSense AI Intelligence Layer                  │
-    │    13-Intent Classifier + Parameter Extraction               │
+    │    Google Gemini 3.6 Flash LLM API                           │
     │    Outputs strict JSON: { "intent": "...", "target": "..." } │
     └─────────────────────────┬────────────────────────────────────┘
                               │
@@ -88,10 +88,9 @@ HARDWARE_MODE = "raspberry_pi"   # Raspberry Pi deployment
 ```
 digital-voice-assistant-in-car/
 ├── drivesense.py               # Complete voice assistant application
-├── drivesense_dataset.csv      # 100+ labeled samples for 13 intents
-├── Driver_Assistant.ipynb      # ML model training & evaluation notebook
+├── api_key.txt                 # Local file for Google Gemini API key
 ├── requirements.txt            # Python dependencies
-├── vosk-model-small-en-in-0.4/ # Offline speech recognition model
+├── vosk-model-en-us-0.22/      # Offline speech recognition model
 ├── .gitignore                  # Git ignore rules
 └── README.md                   # This file
 ```
@@ -113,13 +112,19 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-### 2. Run DriveSense
+### 2. Configure API Key
+Create a file named `api_key.txt` in the root folder and paste your Google Gemini API key inside it.
+```bash
+echo "YOUR_GEMINI_API_KEY" > api_key.txt
+```
+
+### 3. Run DriveSense
 
 ```bash
 python drivesense.py
 ```
 
-### 3. Voice Interaction
+### 4. Voice Interaction
 
 1. Wait for `[IDLE] Waiting for wake word "DriveSense"...`
 2. Say **"DriveSense"** → assistant responds **"Yes?"**
