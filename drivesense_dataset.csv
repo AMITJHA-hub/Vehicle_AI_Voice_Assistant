@@ -1,0 +1,66 @@
+Sentence,Label
+hello,GREETING
+hi drivesense,GREETING
+good morning,GREETING
+hey drivesense,GREETING
+good evening,GREETING
+good afternoon,GREETING
+hello there,GREETING
+hi assistant,GREETING
+hey there,GREETING
+hello car,GREETING
+what is the temperature,GET_TEMPERATURE
+how hot is the cabin,GET_TEMPERATURE
+tell me the cabin temperature,GET_TEMPERATURE
+what is the current temperature,GET_TEMPERATURE
+check the temperature,GET_TEMPERATURE
+is it cold inside the car,GET_TEMPERATURE
+what is the vehicle temperature,GET_TEMPERATURE
+tell me the temperature,GET_TEMPERATURE
+how warm is it in here,GET_TEMPERATURE
+what is the cabin temp,GET_TEMPERATURE
+is there an obstacle,GET_DISTANCE
+how far is the obstacle,GET_DISTANCE
+is anything in front of me,GET_DISTANCE
+what is the distance from the obstacle,GET_DISTANCE
+check obstacle distance,GET_DISTANCE
+is there anything ahead of the car,GET_DISTANCE
+measure distance to obstacle,GET_DISTANCE
+how close is the object in front,GET_DISTANCE
+detect obstacle distance,GET_DISTANCE
+is the path clear ahead,GET_DISTANCE
+what is artificial intelligence,GENERAL_QUERY
+how does gps work,GENERAL_QUERY
+tell me about electric vehicles,GENERAL_QUERY
+what is machine learning,GENERAL_QUERY
+how do hybrid cars function,GENERAL_QUERY
+what causes traffic congestion,GENERAL_QUERY
+explain how anti lock braking system works,GENERAL_QUERY
+how does cruise control work,GENERAL_QUERY
+what is regenerative braking,GENERAL_QUERY
+tell me about autonomous driving,GENERAL_QUERY
+exit,EXIT
+stop,EXIT
+goodbye,EXIT
+quit,EXIT
+close drivesense,EXIT
+turn off assistant,EXIT
+shutdown assistant,EXIT
+bye bye,EXIT
+stop drivesense,EXIT
+end session,EXIT
+call my friend,UNSUPPORTED
+navigate to chennai,UNSUPPORTED
+what is my fuel level,UNSUPPORTED
+turn on the ac,UNSUPPORTED
+detect whether i am sleepy,UNSUPPORTED
+make a phone call,UNSUPPORTED
+open the car trunk,UNSUPPORTED
+play some music,UNSUPPORTED
+turn down the air conditioner,UNSUPPORTED
+call the police,UNSUPPORTED
+run obd diagnostics,UNSUPPORTED
+check engine error codes,UNSUPPORTED
+lock the car doors,UNSUPPORTED
+open the driver window,UNSUPPORTED
+turn on the headlights,UNSUPPORTED

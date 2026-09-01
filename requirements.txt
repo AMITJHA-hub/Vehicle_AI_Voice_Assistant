@@ -1,0 +1,21 @@
+# Core Machine Learning & Data Processing
+numpy
+pandas
+scipy
+scikit-learn
+
+# NLP & Text Preprocessing
+nltk
+
+# Audio & Speech Recognition
+vosk
+pyaudio
+
+# Visualization
+matplotlib
+seaborn
+
+# Interactive Notebook & Widgets
+ipywidgets
+ipykernel
+notebook
