@@ -4,8 +4,8 @@ DriveSense: AI-Driven In-Vehicle Digital Voice Assistant
 Hands-Free, Continuous Two-Way Spoken Voice Assistant System.
 
 Features:
-1. Wake-Word Listener ("Hey DriveSense", "DriveSense", "Hello DriveSense")
-2. Automatic End-of-Speech / Silence Detection
+1. Instant Real-Time Wake-Word Listener ("DriveSense", "Hey DriveSense", "Drive Sense")
+2. Real-Time Partial Recognition & Silence / End-of-Speech Detection
 3. Auto-Mute Microphone during Text-to-Speech Output (Prevents Echo/Feedback Loop)
 4. Decoupled AI Intelligence & Structured JSON Intent Classification
 5. Hardware Sensor Dispatcher (Raspberry Pi GPIO or Laptop Simulation)
@@ -250,27 +250,28 @@ class DriveSenseHardwareDispatcher:
 
 
 # ==============================================================================
-# 3. HANDS-FREE CONTINUOUS TWO-WAY VOICE ENGINE
+# 3. HANDS-FREE CONTINUOUS TWO-WAY VOICE ENGINE WITH INSTANT WAKE
 # ==============================================================================
 class DriveSenseContinuousVoiceAssistant:
     """
-    Continuous Hands-Free Two-Way Voice Assistant with Wake-Word & Auto-Mute.
+    Continuous Hands-Free Two-Way Voice Assistant with Instant Partial-Match Wake-Word
+    and Automatic End-of-Speech Detection.
     """
 
-    WAKE_WORDS = [
-        "hey drivesense", "drive sense", "drivesense", "hello drivesense",
-        "hi drivesense", "ok drivesense", "assistant", "hey car", "wake up"
+    # Comprehensive phonetic patterns for "DriveSense" across various accents
+    WAKE_PATTERNS = [
+        r"\b(hey|hi|hello|ok)?\s*(drive\s*sense|drivesense|drive\s*sounds|drive\s*cents|dry\s*sense|drive\s*send|drive\s*side|drive\s*suns|drive\s*sun|drive|driver)\b",
+        r"\b(hey|hi|hello|ok)?\s*(assistant|car assistant|voice assistant)\b",
+        r"\b(wake\s*up|start listening)\b"
     ]
 
     def __init__(self, model_path: str = "vosk-model-small-en-in-0.4"):
         self.model_path = model_path
         self.ai = DriveSenseAI()
         self.dispatcher = DriveSenseHardwareDispatcher(is_raspberry_pi=False)
-        self.tts_lock = threading.Lock()
         self.is_running = True
         self.is_speaking = False
 
-        # 1. Initialize Vosk Model
         if not HAS_VOSK:
             raise RuntimeError("Vosk and PyAudio are required for voice assistant.")
 
@@ -287,7 +288,7 @@ class DriveSenseContinuousVoiceAssistant:
         Speaks response aloud while ensuring microphone is muted to prevent feedback.
         """
         self.is_speaking = True
-        print(f"\n[🔊 DriveSense Speaking]: \"{text}\"")
+        print(f"\n[🔊 DriveSense]: \"{text}\"")
 
         if HAS_TTS:
             try:
@@ -301,27 +302,26 @@ class DriveSenseContinuousVoiceAssistant:
         else:
             print("[Notice: pyttsx3 not available for audio output]")
 
-        time.sleep(0.3)  # Brief pause after speaking
+        time.sleep(0.2)  # Brief pause after speaking
         self.is_speaking = False
 
-    def extract_wake_word_and_command(self, text: str) -> Tuple[bool, str]:
+    def check_wake_word(self, text: str) -> Tuple[bool, str, str]:
         """
-        Checks if text contains a wake word and extracts any accompanying command.
+        Instant phonetic wake-word detection. Returns (is_wake, extracted_command, matched_word).
         """
         clean = text.lower().strip()
-        for w in self.WAKE_WORDS:
-            if w in clean:
-                # Remove wake word to get the trailing command
-                command = clean.split(w, 1)[1].strip()
-                # Remove common filler words
-                command = re.sub(r'^(please|can you|could you|tell me)\s*', '', command).strip()
-                return True, command
-        return False, ""
+        for pattern in self.WAKE_PATTERNS:
+            match = re.search(pattern, clean)
+            if match:
+                command = clean[match.end():].strip()
+                command = re.sub(r'^(please|can you|could you|tell me|check)\s*', '', command).strip()
+                return True, command, match.group(0)
+        return False, "", ""
 
     def run_continuous_assistant(self):
         """
         Main Hands-Free Two-Way Voice Loop.
-        1. Listens for Wake-Word in STANDBY.
+        1. Listens for Wake-Word in STANDBY (using real-time partials for instant wakeup).
         2. When awakened, listens for command with automatic end-of-speech detection.
         3. Mutes microphone, processes intent, speaks response through speaker.
         4. Seamlessly resumes listening.
@@ -331,17 +331,17 @@ class DriveSenseContinuousVoiceAssistant:
         CHUNK_SIZE = 2048
 
         print("\n" + "=" * 70)
-        print("   🚗 DRIVESENSE CONTINUOUS TWO-WAY VOICE ASSISTANT")
+        print("   🚗 DRIVESENSE INSTANT TWO-WAY VOICE ASSISTANT")
         print("=" * 70)
-        print("  • Wake words: \"Hey DriveSense\" | \"DriveSense\" | \"Hello DriveSense\"")
-        print("  • Say \"Stop\" or \"Goodbye\" to put assistant on standby.")
-        print("  • Speak naturally — the microphone automatically mutes while DriveSense speaks.")
+        print("  • Wake words: \"DriveSense\" | \"Hey DriveSense\" | \"Drive Sense\"")
+        print("  • Try asking: \"What is the temperature?\" | \"Is there an obstacle ahead?\"")
+        print("  • Say \"Stop\" or \"Goodbye\" to put assistant to sleep.")
+        print("  • Mic automatically mutes while DriveSense speaks.")
         print("=" * 70 + "\n")
 
-        # Initial Welcome
-        self.speak("DriveSense voice assistant is online and ready.")
+        self.speak("DriveSense is ready. Say DriveSense to activate.")
 
-        state = "STANDBY"  # "STANDBY" or "ACTIVE_LISTENING"
+        state = "STANDBY"
         rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
         rec.SetWords(True)
 
@@ -354,11 +354,11 @@ class DriveSenseContinuousVoiceAssistant:
                 frames_per_buffer=CHUNK_SIZE
             )
 
-            print("💤 [STANDBY] Waiting for wake word... (Say \"Hey DriveSense\")")
+            print("💤 [STANDBY] Listening for wake word... (Say \"DriveSense\" or \"Hey DriveSense\")")
 
             accumulated_speech = []
             last_speech_time = 0
-            silence_timeout = 1.8  # Seconds of silence after speech to finalize command
+            silence_timeout = 1.5  # Seconds of silence to finalize command
 
             while self.is_running:
                 # If DriveSense is speaking, drain/discard audio stream to avoid self-hearing
@@ -377,53 +377,63 @@ class DriveSenseContinuousVoiceAssistant:
                 if len(data) == 0:
                     continue
 
+                # ==============================================================
+                # 1. STANDBY STATE (Wake-Word Listener)
+                # ==============================================================
                 if state == "STANDBY":
-                    # Standby Wake-Word Listener Loop
-                    if rec.AcceptWaveform(data):
-                        res = json.loads(rec.Result())
-                        recognized_text = res.get("text", "").strip()
+                    # Check real-time partial recognition for sub-second wake detection
+                    partial_res = json.loads(rec.PartialResult()).get("partial", "").strip()
+                    is_wake = False
+                    command = ""
+                    matched_word = ""
 
-                        if recognized_text:
-                            is_wake, command = self.extract_wake_word_and_command(recognized_text)
-                            if is_wake:
-                                print(f"\n🟢 [WAKE DETECTED]: \"{recognized_text}\"")
-                                
-                                # If the driver spoke the command directly with the wake word
-                                if command and len(command.split()) > 1:
-                                    self._process_and_respond(command)
-                                    rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
-                                    rec.SetWords(True)
-                                    print("💤 [STANDBY] Waiting for wake word... (Say \"Hey DriveSense\")")
-                                else:
-                                    # Prompt the driver that it is listening
-                                    self.speak("Yes, I am listening.")
-                                    state = "ACTIVE_LISTENING"
-                                    rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
-                                    rec.SetWords(True)
-                                    accumulated_speech = []
-                                    last_speech_time = time.time()
-                                    print("\n🎤 [ACTIVE LISTENING] Speak your command now...")
+                    if partial_res:
+                        is_wake, command, matched_word = self.check_wake_word(partial_res)
 
+                    # Also check complete phrase if partial missed
+                    if not is_wake and rec.AcceptWaveform(data):
+                        full_res = json.loads(rec.Result()).get("text", "").strip()
+                        if full_res:
+                            is_wake, command, matched_word = self.check_wake_word(full_res)
+
+                    if is_wake:
+                        print(f"\n🟢 [WAKE DETECTED]: Matched \"{matched_word}\"")
+
+                        # If user spoke the entire command in the same breath
+                        if command and len(command.split()) >= 2:
+                            self._process_and_respond(command)
+                            rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
+                            rec.SetWords(True)
+                            print("💤 [STANDBY] Listening for wake word... (Say \"DriveSense\")")
+                        else:
+                            # Wake up and prompt user
+                            self.speak("Yes, I am listening.")
+                            state = "ACTIVE_LISTENING"
+                            rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
+                            rec.SetWords(True)
+                            accumulated_speech = []
+                            last_speech_time = time.time()
+                            print("\n🎤 [ACTIVE LISTENING] Speak your command now...")
+
+                # ==============================================================
+                # 2. ACTIVE LISTENING STATE (Command Transcription)
+                # ==============================================================
                 elif state == "ACTIVE_LISTENING":
-                    # Active Command Listening with Auto-Silence Detection
-                    is_complete = rec.AcceptWaveform(data)
-                    
-                    if is_complete:
+                    if rec.AcceptWaveform(data):
                         res = json.loads(rec.Result())
                         text_chunk = res.get("text", "").strip()
                         if text_chunk:
                             accumulated_speech.append(text_chunk)
                             last_speech_time = time.time()
-                            print(f"  [Transcribed]: {text_chunk}")
+                            print(f"  [Recognized]: {text_chunk}")
                     else:
                         partial_res = json.loads(rec.PartialResult())
                         partial_text = partial_res.get("partial", "").strip()
                         if partial_text:
                             last_speech_time = time.time()
-                            # Print live typing indicator
-                            print(f"\r  Listening... -> {partial_text}    ", end="", flush=True)
+                            print(f"\r  Hearing: \"{partial_text}\"    ", end="", flush=True)
 
-                    # Check for Silence / End of Speech Timeout
+                    # Silence / End of Speech Timeout
                     time_since_speech = time.time() - last_speech_time
                     if accumulated_speech or (last_speech_time > 0 and time_since_speech > silence_timeout):
                         final_res = json.loads(rec.FinalResult())
@@ -434,10 +444,10 @@ class DriveSenseContinuousVoiceAssistant:
                         full_command = " ".join(accumulated_speech).strip()
 
                         if full_command:
-                            print(f"\n\n⚡ [COMMAND CAPTURED]: \"{full_command}\"")
+                            print(f"\n\n⚡ [COMMAND RECEIVED]: \"{full_command}\"")
                             self._process_and_respond(full_command)
                         else:
-                            print("\n[No command detected. Returning to standby.]")
+                            print("\n[No speech detected. Returning to standby.]")
 
                         # Reset back to Standby
                         state = "STANDBY"
@@ -445,7 +455,7 @@ class DriveSenseContinuousVoiceAssistant:
                         rec.SetWords(True)
                         accumulated_speech = []
                         last_speech_time = 0
-                        print("💤 [STANDBY] Waiting for wake word... (Say \"Hey DriveSense\")")
+                        print("💤 [STANDBY] Listening for wake word... (Say \"DriveSense\")")
 
             stream.stop_stream()
             stream.close()
