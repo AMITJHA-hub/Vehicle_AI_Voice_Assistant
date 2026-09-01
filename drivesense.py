@@ -1,13 +1,15 @@
 """
 DriveSense: AI-Driven In-Vehicle Digital Voice Assistant
 =========================================================
-Intelligence and Intent-Understanding Layer for Connected Vehicles.
-Decoupled Architecture: Returns structured JSON intents for the Python
-application/dispatcher to execute sensor operations and hardware commands.
+Hands-Free, Continuous Two-Way Spoken Voice Assistant System.
 
-Deployment Targets:
-- Development: Windows / Mac / Linux Laptops (Simulation Mode)
-- Production: Raspberry Pi (Physical GPIO Sensors: DHT Temp & HC-SR04 Ultrasonic)
+Features:
+1. Wake-Word Listener ("Hey DriveSense", "DriveSense", "Hello DriveSense")
+2. Automatic End-of-Speech / Silence Detection
+3. Auto-Mute Microphone during Text-to-Speech Output (Prevents Echo/Feedback Loop)
+4. Decoupled AI Intelligence & Structured JSON Intent Classification
+5. Hardware Sensor Dispatcher (Raspberry Pi GPIO or Laptop Simulation)
+6. Continuous Hands-Free Spoken Interaction Loop
 """
 
 import os
@@ -17,9 +19,9 @@ import json
 import time
 import queue
 import threading
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Tuple
 
-# Optional Audio / TTS Imports
+# Audio / Speech Recognition
 try:
     import pyaudio
     from vosk import Model, KaldiRecognizer
@@ -27,6 +29,7 @@ try:
 except ImportError:
     HAS_VOSK = False
 
+# Text-to-Speech
 try:
     import pyttsx3
     HAS_TTS = True
@@ -77,7 +80,7 @@ class DriveSenseAI:
     ]
 
     EXIT_PATTERNS = [
-        r"^(exit|stop|goodbye|quit|bye|close drivesense|shutdown|turn off|stop assistant|end)\b"
+        r"^(exit|stop|goodbye|quit|bye|close drivesense|shutdown|turn off|stop assistant|end|mute|sleep|standby)\b"
     ]
 
     KNOWLEDGE_BASE = {
@@ -139,7 +142,6 @@ class DriveSenseAI:
         elif intent == "UNSUPPORTED":
             response_text = "That feature is not currently available in DriveSense."
         else:  # GENERAL_QUERY
-            # Find relevant answer from knowledge base
             clean_text = text.lower().strip()
             answer = None
             for key, val in self.KNOWLEDGE_BASE.items():
@@ -155,10 +157,6 @@ class DriveSenseAI:
             "response": response_text
         }
         return result
-
-    def get_json_response(self, text: str) -> str:
-        """Returns JSON string format."""
-        return json.dumps(self.generate_response(text), indent=2)
 
 
 # ==============================================================================
@@ -185,30 +183,23 @@ class DriveSenseHardwareDispatcher:
                 self.is_raspberry_pi = False
 
     def read_temperature_sensor(self) -> float:
-        """
-        Obtains cabin temperature in Celsius.
-        Reads from DHT11/DHT22 if on Pi, or generates calibrated simulation reading.
-        """
+        """Obtains cabin temperature in Celsius."""
         if self.is_raspberry_pi and self.gpio_initialized:
-            # Physical DHT reading hook
             try:
                 import Adafruit_DHT
                 sensor = Adafruit_DHT.DHT22
-                pin = 4  # GPIO 4
+                pin = 4
                 _, temperature = Adafruit_DHT.read_retry(sensor, pin)
                 if temperature is not None:
                     return round(float(temperature), 1)
             except Exception:
                 pass
         
-        # Laptop Simulation fallback (Realistic cabin temperature)
         import random
         return round(24.0 + random.uniform(-1.5, 2.5), 1)
 
     def read_distance_sensor(self) -> float:
-        """
-        Obtains obstacle distance in Centimeters using Ultrasonic Sensor (HC-SR04).
-        """
+        """Obtains obstacle distance in Centimeters using Ultrasonic Sensor."""
         if self.is_raspberry_pi and self.gpio_initialized:
             try:
                 TRIG_PIN = 23
@@ -236,14 +227,11 @@ class DriveSenseHardwareDispatcher:
             except Exception:
                 pass
 
-        # Laptop Simulation fallback (Realistic obstacle distance in cm)
         import random
         return round(45.0 + random.uniform(-15.0, 30.0), 1)
 
     def dispatch(self, intent_payload: Dict[str, str]) -> str:
-        """
-        Executes intent and constructs final driver-facing spoken output.
-        """
+        """Executes intent and constructs final driver-facing spoken output."""
         intent = intent_payload.get("intent")
         initial_response = intent_payload.get("response", "")
 
@@ -258,148 +246,239 @@ class DriveSenseHardwareDispatcher:
             else:
                 return f"The nearest obstacle is at a distance of {dist} centimeters."
 
-        # For Greeting, General Query, Exit, and Unsupported, pass through the response
         return initial_response
 
 
 # ==============================================================================
-# 3. AUDIO & SPEECH LAYER (STT & TTS)
+# 3. HANDS-FREE CONTINUOUS TWO-WAY VOICE ENGINE
 # ==============================================================================
-class DriveSenseVoiceIO:
+class DriveSenseContinuousVoiceAssistant:
     """
-    Handles Offline Speech-to-Text (Vosk) and Text-to-Speech (pyttsx3).
+    Continuous Hands-Free Two-Way Voice Assistant with Wake-Word & Auto-Mute.
     """
+
+    WAKE_WORDS = [
+        "hey drivesense", "drive sense", "drivesense", "hello drivesense",
+        "hi drivesense", "ok drivesense", "assistant", "hey car", "wake up"
+    ]
 
     def __init__(self, model_path: str = "vosk-model-small-en-in-0.4"):
         self.model_path = model_path
-        self.vosk_model = None
-        self.tts_engine = None
+        self.ai = DriveSenseAI()
+        self.dispatcher = DriveSenseHardwareDispatcher(is_raspberry_pi=False)
+        self.tts_lock = threading.Lock()
+        self.is_running = True
+        self.is_speaking = False
 
-        # Initialize TTS
-        if HAS_TTS:
-            try:
-                self.tts_engine = pyttsx3.init()
-                self.tts_engine.setProperty('rate', 170)
-            except Exception:
-                self.tts_engine = None
+        # 1. Initialize Vosk Model
+        if not HAS_VOSK:
+            raise RuntimeError("Vosk and PyAudio are required for voice assistant.")
 
-        # Initialize Vosk
-        if HAS_VOSK and os.path.exists(self.model_path):
-            try:
-                self.vosk_model = Model(self.model_path)
-            except Exception as e:
-                print(f"[Notice] Vosk model loading: {e}")
+        if not os.path.exists(self.model_path):
+            if os.path.exists("vosk-model-small-en-us-0.15"):
+                self.model_path = "vosk-model-small-en-us-0.15"
+
+        print(f"[*] Initializing Offline Vosk Model from '{self.model_path}'...")
+        self.vosk_model = Model(self.model_path)
+        print("[+] Vosk Model initialized successfully!")
 
     def speak(self, text: str):
-        """Speaks the response aloud to the driver."""
-        print(f"[DriveSense Spoken]: \"{text}\"")
-        if self.tts_engine:
+        """
+        Speaks response aloud while ensuring microphone is muted to prevent feedback.
+        """
+        self.is_speaking = True
+        print(f"\n[🔊 DriveSense Speaking]: \"{text}\"")
+
+        if HAS_TTS:
             try:
-                self.tts_engine.say(text)
-                self.tts_engine.runAndWait()
-            except Exception:
-                pass
+                engine = pyttsx3.init()
+                engine.setProperty('rate', 170)
+                engine.setProperty('volume', 1.0)
+                engine.say(text)
+                engine.runAndWait()
+            except Exception as e:
+                print(f"[TTS Notice]: {e}")
+        else:
+            print("[Notice: pyttsx3 not available for audio output]")
 
-    def record_and_transcribe(self, duration_seconds: int = 5) -> str:
-        """Records from microphone and transcribes with Vosk."""
-        if not HAS_VOSK or not self.vosk_model:
-            print("[Notice] Microphone STT requires Vosk and PyAudio.")
-            return ""
+        time.sleep(0.3)  # Brief pause after speaking
+        self.is_speaking = False
 
-        rec = KaldiRecognizer(self.vosk_model, 16000)
+    def extract_wake_word_and_command(self, text: str) -> Tuple[bool, str]:
+        """
+        Checks if text contains a wake word and extracts any accompanying command.
+        """
+        clean = text.lower().strip()
+        for w in self.WAKE_WORDS:
+            if w in clean:
+                # Remove wake word to get the trailing command
+                command = clean.split(w, 1)[1].strip()
+                # Remove common filler words
+                command = re.sub(r'^(please|can you|could you|tell me)\s*', '', command).strip()
+                return True, command
+        return False, ""
+
+    def run_continuous_assistant(self):
+        """
+        Main Hands-Free Two-Way Voice Loop.
+        1. Listens for Wake-Word in STANDBY.
+        2. When awakened, listens for command with automatic end-of-speech detection.
+        3. Mutes microphone, processes intent, speaks response through speaker.
+        4. Seamlessly resumes listening.
+        """
+        p = pyaudio.PyAudio()
+        FRAME_RATE = 16000
+        CHUNK_SIZE = 2048
+
+        print("\n" + "=" * 70)
+        print("   🚗 DRIVESENSE CONTINUOUS TWO-WAY VOICE ASSISTANT")
+        print("=" * 70)
+        print("  • Wake words: \"Hey DriveSense\" | \"DriveSense\" | \"Hello DriveSense\"")
+        print("  • Say \"Stop\" or \"Goodbye\" to put assistant on standby.")
+        print("  • Speak naturally — the microphone automatically mutes while DriveSense speaks.")
+        print("=" * 70 + "\n")
+
+        # Initial Welcome
+        self.speak("DriveSense voice assistant is online and ready.")
+
+        state = "STANDBY"  # "STANDBY" or "ACTIVE_LISTENING"
+        rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
         rec.SetWords(True)
 
-        p = pyaudio.PyAudio()
         try:
             stream = p.open(
                 format=pyaudio.paInt16,
                 channels=1,
-                rate=16000,
+                rate=FRAME_RATE,
                 input=True,
-                frames_per_buffer=2048
+                frames_per_buffer=CHUNK_SIZE
             )
-            print(f"[*] Listening for {duration_seconds} seconds... (Speak your command)")
-            
-            segments = []
-            start_time = time.time()
-            while time.time() - start_time < duration_seconds:
-                data = stream.read(2048, exception_on_overflow=False)
-                if rec.AcceptWaveform(data):
-                    res = json.loads(rec.Result())
-                    txt = res.get("text", "").strip()
-                    if txt:
-                        segments.append(txt)
-                        print(f"  [Partial]: {txt}")
 
-            final_res = json.loads(rec.FinalResult())
-            final_txt = final_res.get("text", "").strip()
-            if final_txt:
-                segments.append(final_txt)
+            print("💤 [STANDBY] Waiting for wake word... (Say \"Hey DriveSense\")")
+
+            accumulated_speech = []
+            last_speech_time = 0
+            silence_timeout = 1.8  # Seconds of silence after speech to finalize command
+
+            while self.is_running:
+                # If DriveSense is speaking, drain/discard audio stream to avoid self-hearing
+                if self.is_speaking:
+                    try:
+                        stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                    except Exception:
+                        pass
+                    continue
+
+                try:
+                    data = stream.read(CHUNK_SIZE, exception_on_overflow=False)
+                except Exception:
+                    continue
+
+                if len(data) == 0:
+                    continue
+
+                if state == "STANDBY":
+                    # Standby Wake-Word Listener Loop
+                    if rec.AcceptWaveform(data):
+                        res = json.loads(rec.Result())
+                        recognized_text = res.get("text", "").strip()
+
+                        if recognized_text:
+                            is_wake, command = self.extract_wake_word_and_command(recognized_text)
+                            if is_wake:
+                                print(f"\n🟢 [WAKE DETECTED]: \"{recognized_text}\"")
+                                
+                                # If the driver spoke the command directly with the wake word
+                                if command and len(command.split()) > 1:
+                                    self._process_and_respond(command)
+                                    rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
+                                    rec.SetWords(True)
+                                    print("💤 [STANDBY] Waiting for wake word... (Say \"Hey DriveSense\")")
+                                else:
+                                    # Prompt the driver that it is listening
+                                    self.speak("Yes, I am listening.")
+                                    state = "ACTIVE_LISTENING"
+                                    rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
+                                    rec.SetWords(True)
+                                    accumulated_speech = []
+                                    last_speech_time = time.time()
+                                    print("\n🎤 [ACTIVE LISTENING] Speak your command now...")
+
+                elif state == "ACTIVE_LISTENING":
+                    # Active Command Listening with Auto-Silence Detection
+                    is_complete = rec.AcceptWaveform(data)
+                    
+                    if is_complete:
+                        res = json.loads(rec.Result())
+                        text_chunk = res.get("text", "").strip()
+                        if text_chunk:
+                            accumulated_speech.append(text_chunk)
+                            last_speech_time = time.time()
+                            print(f"  [Transcribed]: {text_chunk}")
+                    else:
+                        partial_res = json.loads(rec.PartialResult())
+                        partial_text = partial_res.get("partial", "").strip()
+                        if partial_text:
+                            last_speech_time = time.time()
+                            # Print live typing indicator
+                            print(f"\r  Listening... -> {partial_text}    ", end="", flush=True)
+
+                    # Check for Silence / End of Speech Timeout
+                    time_since_speech = time.time() - last_speech_time
+                    if accumulated_speech or (last_speech_time > 0 and time_since_speech > silence_timeout):
+                        final_res = json.loads(rec.FinalResult())
+                        final_chunk = final_res.get("text", "").strip()
+                        if final_chunk:
+                            accumulated_speech.append(final_chunk)
+
+                        full_command = " ".join(accumulated_speech).strip()
+
+                        if full_command:
+                            print(f"\n\n⚡ [COMMAND CAPTURED]: \"{full_command}\"")
+                            self._process_and_respond(full_command)
+                        else:
+                            print("\n[No command detected. Returning to standby.]")
+
+                        # Reset back to Standby
+                        state = "STANDBY"
+                        rec = KaldiRecognizer(self.vosk_model, FRAME_RATE)
+                        rec.SetWords(True)
+                        accumulated_speech = []
+                        last_speech_time = 0
+                        print("💤 [STANDBY] Waiting for wake word... (Say \"Hey DriveSense\")")
 
             stream.stop_stream()
             stream.close()
-            return " ".join(segments).strip()
-        except Exception as e:
-            print(f"[Audio Error]: {e}")
-            return ""
+
+        except KeyboardInterrupt:
+            print("\nDriveSense stopping...")
+            self.speak("DriveSense shutting down. Goodbye.")
         finally:
             p.terminate()
 
+    def _process_and_respond(self, user_command: str):
+        """
+        Executes Intent Classification -> Sensor Dispatch -> TTS Output.
+        """
+        # 1. AI Intelligence Layer (Strict Structured JSON)
+        intent_payload = self.ai.generate_response(user_command)
+        print("\n--- [DriveSense AI Structured JSON Output] ---")
+        print(json.dumps(intent_payload, indent=2))
+
+        # 2. Hardware Sensor Dispatcher
+        spoken_response = self.dispatcher.dispatch(intent_payload)
+
+        # 3. Two-Way Spoken Delivery
+        self.speak(spoken_response)
+        print("-" * 70)
+
 
 # ==============================================================================
-# 4. MAIN INTERACTIVE APPLICATION
+# 4. MAIN ENTRY POINT
 # ==============================================================================
 def main():
-    print("=" * 65)
-    print("   🚗 DriveSense: In-Vehicle Digital Voice Assistant")
-    print("   Decoupled AI Intent Layer & Hardware Dispatcher")
-    print("=" * 65)
-
-    ai = DriveSenseAI()
-    dispatcher = DriveSenseHardwareDispatcher(is_raspberry_pi=False)
-    voice_io = DriveSenseVoiceIO()
-
-    # Initial Greeting
-    welcome_text = "DriveSense initialized. How can I assist your drive?"
-    print(f"\nAI: {welcome_text}\n")
-    voice_io.speak(welcome_text)
-
-    print("Options:")
-    print("  Type your command below, or type 'mic' to record from your microphone.")
-    print("  Type 'exit' to quit.\n")
-
-    while True:
-        try:
-            user_input = input("Driver > ").strip()
-            if not user_input:
-                continue
-
-            if user_input.lower() == "mic":
-                user_input = voice_io.record_and_transcribe(duration_seconds=5)
-                if not user_input:
-                    print("[No speech recognized. Please try again or type directly.]\n")
-                    continue
-                print(f"Driver (Voice): \"{user_input}\"")
-
-            # 1. Intelligence Layer: Return Strict JSON
-            json_payload = ai.generate_response(user_input)
-            print("\n[DriveSense AI Intent Layer JSON]:")
-            print(json.dumps(json_payload, indent=2))
-
-            # 2. Application Dispatcher: Execute Sensor Operations
-            spoken_response = dispatcher.dispatch(json_payload)
-
-            # 3. Output to Driver
-            print(f"\n[Driver Output]: {spoken_response}")
-            voice_io.speak(spoken_response)
-            print("-" * 65)
-
-            if json_payload["intent"] == "EXIT":
-                break
-
-        except (KeyboardInterrupt, EOFError):
-            print("\nDriveSense session terminated.")
-            break
+    assistant = DriveSenseContinuousVoiceAssistant()
+    assistant.run_continuous_assistant()
 
 
 if __name__ == "__main__":
