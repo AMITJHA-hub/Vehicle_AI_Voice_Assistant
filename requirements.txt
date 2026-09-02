@@ -11,6 +11,9 @@ nltk
 vosk
 pyaudio
 
+# Text-to-Speech
+pyttsx3
+
 # Visualization
 matplotlib
 seaborn
