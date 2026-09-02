@@ -1,10 +1,10 @@
-# 🚗 DriveSense — AI-Driven In-Vehicle Digital Voice Assistant
+#DriveSense: An AI-Driven In-Vehicle Digital Voice Assistant
 
 **DriveSense** is a realistic, AI-driven, hands-free in-vehicle digital voice assistant designed for automotive environments. It features a **decoupled architecture** separating natural language intent understanding from hardware sensor/actuator execution, with a **hardware abstraction layer** enabling seamless migration from laptop development to **Raspberry Pi** deployment.
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 ```
                        [ Driver Spoken Voice ]
@@ -43,7 +43,7 @@
 
 ---
 
-## 🎯 Supported Intents (13 Total)
+## Supported Intents (13 Total)
 
 | Intent | Description | Example Voice Commands |
 | :--- | :--- | :--- |
@@ -63,7 +63,7 @@
 
 ---
 
-## 🔧 Hardware Abstraction Layer
+## Hardware Abstraction Layer
 
 DriveSense uses a **configuration-driven hardware abstraction** so the same AI/voice code runs on both platforms:
 
@@ -83,7 +83,7 @@ HARDWARE_MODE = "raspberry_pi"   # Raspberry Pi deployment
 
 ---
 
-## 🗂️ Project Structure
+## Project Structure
 
 ```
 digital-voice-assistant-in-car/
@@ -97,7 +97,7 @@ digital-voice-assistant-in-car/
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### 1. Install Dependencies
 
@@ -141,7 +141,7 @@ python drivesense.py
 
 ---
 
-## 🍓 Raspberry Pi Deployment
+## Raspberry Pi Deployment
 
 ### Hardware Connections
 
@@ -172,5 +172,5 @@ The voice/AI/dispatcher code remains **identical** — only the hardware impleme
 
 ---
 
-## 📄 License
+## License
 MIT License
