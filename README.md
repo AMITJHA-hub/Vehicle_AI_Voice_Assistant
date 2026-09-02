@@ -1,4 +1,4 @@
-#DriveSense: An AI-Driven In-Vehicle Digital Voice Assistant
+# DriveSense: An AI-Driven In-Vehicle Digital Voice Assistant
 
 **DriveSense** is a realistic, AI-driven, hands-free in-vehicle digital voice assistant designed for automotive environments. It features a **decoupled architecture** separating natural language intent understanding from hardware sensor/actuator execution, with a **hardware abstraction layer** enabling seamless migration from laptop development to **Raspberry Pi** deployment.
 
